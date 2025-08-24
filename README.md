@@ -47,7 +47,9 @@ Scalable process: works automatically for every new visitor without staff interv
 
 # Workflow Diagram
 
-(Include a simple diagram here — QR Code → WATI → Google Sheets → Apps Script → Zapier → WATI WhatsApp Reply)
+QR Code → WATI → Google Sheets → Apps Script → Zapier → WATI WhatsApp Reply
+
+https://app.diagrams.net/?splash=0#G13JNE7jI-4NBBpdyPjC41O3OTfam2OhAy#%7B"pageId"%3A"k_AqtTDA6T2ZbBNLh1TI"%7D
 
 # Notes
 
