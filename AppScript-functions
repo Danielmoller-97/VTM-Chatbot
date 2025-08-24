@@ -1,0 +1,137 @@
+function onChange(e) {
+  //if (e.changeType !== 'INSERT_ROW') return;
+  Logger.log ("onChange");
+  const newRecordSheet = SpreadsheetApp.getActiveSpreadsheet().getActiveSheet();
+
+  if (newRecordSheet.getName() != "New Record")
+    return;
+
+  var newRecordDataRange = newRecordSheet.getDataRange();
+  var newRecordData = newRecordDataRange.getValues();
+  
+  var lastRowIndex = newRecordData.length - 1;
+  if (lastRowIndex < 1) {
+    return;
+  }
+
+  var rawPhone = newRecordData[lastRowIndex][0];
+  var newPhone = typeof rawPhone === 'number' 
+  ? rawPhone.toFixed(0) 
+  : String(rawPhone);
+  var newName = newRecordData[lastRowIndex][1];
+  var newLanguage = newRecordData[lastRowIndex][2];
+
+  if (!newPhone || !newName) {
+    return;
+  }
+
+  processNewIndemnityRecord(newPhone, newName, newLanguage);
+  newRecordSheet.deleteRow(lastRowIndex + 1);
+}
+
+function processNewIndemnityRecord(newPhone, newName, newLanguage) {
+  Logger.log("Processing New Indemnity Record");
+  const indemnitySheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName('Indemnity');
+
+  if (!indemnitySheet) {
+    SpreadsheetApp.getUi().alert('Indemnity does not exist!');
+    return;
+  }
+
+  var indemnityDataRange = indemnitySheet.getDataRange();
+  var indemnityData = indemnityDataRange.getValues();
+  var highestCodeNumber = 0;
+
+  for (var i = 1; i < indemnityData.length; i++) {
+    var phone = indemnityData[i][0];
+    var code = indemnityData[i][2];
+    
+    if (phone && phone == newPhone) {
+      updateIndemnityRecord(newName, newLanguage,i);
+      return;
+    }
+    
+    if (code && code.toString().startsWith("VTM")) {
+      var numberPart = parseInt(code.substring(3));
+      if (numberPart > highestCodeNumber) {
+        highestCodeNumber = numberPart;
+      }
+    }
+  }
+
+  addIndemnityRecord(newPhone, newName, newLanguage, highestCodeNumber + 1);
+}
+
+function addIndemnityRecord(phone, name, language, newCodeNumber) {
+  Logger.log("Adding New Indemnity Record: " + newCodeNumber);
+  const indemnitySheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName('Indemnity');
+
+  var lastRowIndex = indemnitySheet.getLastRow() + 1;
+
+  var newCode = "VTM" + Utilities.formatString("%04d", newCodeNumber);
+
+  indemnitySheet.getRange(lastRowIndex, 1).setValue(phone);
+  indemnitySheet.getRange(lastRowIndex, 2).setValue(name);
+  indemnitySheet.getRange(lastRowIndex, 3).setValue(newCode);
+  indemnitySheet.getRange(lastRowIndex, 4).setValue(new Date());
+  indemnitySheet.getRange(lastRowIndex, 5).setValue(new Date());
+  indemnitySheet.getRange(lastRowIndex, 6).setValue(1);
+  indemnitySheet.getRange(lastRowIndex, 7).setValue(language);
+
+  sendWebhook("endpoint name", phone, name, newCode, 1, language);
+}
+
+function updateIndemnityRecord(name, language, index) {
+  Logger.log("Update Existing Indemnity Record");
+  const indemnitySheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName('Indemnity');
+  var indemnityDataRange = indemnitySheet.getDataRange();
+  var indemnityData = indemnityDataRange.getValues();
+
+  var visitCount = indemnityData[index][5];
+  if (!visitCount || isNaN(visitCount)) {
+    visitCount = 1;
+  } else {
+    visitCount = parseInt(visitCount) + 1;
+  }
+  
+  indemnitySheet.getRange(index +1, 2).setValue(name);
+  indemnitySheet.getRange(index +1, 5).setValue(new Date());
+  indemnitySheet.getRange(index +1, 6).setValue(visitCount);
+  indemnitySheet.getRange(index +1, 7).setValue(language);
+  
+  var phone = indemnityData[index][0];
+  var existingCode = indemnityData[index][2];
+
+  sendWebhook("endpoint name", phone, name, existingCode, visitCount, language);
+}
+
+function sendWebhook(urlEndpoint, phone, name, uniqueCode, visits, language) {
+  Logger.log("sendWebhook function was called");
+
+  const url = "https://hooks.zapier.com/hooks/catch/staticdestination/" + urlEndpoint + "/";
+
+  const payload = {
+    phone: String(phone || "").trim(),
+    name: String(name || "").trim(),
+    unique_code: String(uniqueCode || "").trim(),
+    number_of_visits: String(visits || "0").trim(),
+    language: String(language || "").trim()
+  };
+
+  Logger.log("➡Webhook payload: " + JSON.stringify(payload));
+  Logger.log("➡Webhook URL: " + url);
+
+  const options = {
+    method: "post",
+    contentType: "application/json",
+    payload: JSON.stringify(payload)
+  };
+
+  try {
+    const response = UrlFetchApp.fetch(url, options);
+    Logger.log("Webhook response code: " + response.getResponseCode());
+    Logger.log("Webhook response body: " + response.getContentText());
+  } catch (e) {
+    Logger.log("Webhook error: " + e.message);
+  }
+}
